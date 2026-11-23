@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PharmaPredict AI</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232457d6'/%3E%3Cpath d='M8 21l5-6 4 3 7-9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap topbar__inner">
+      <a class="brand" href="/" aria-label="PharmaPredict AI home">
+        <span class="brand__mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32"><rect width="32" height="32" rx="9"/><path d="M8 21l5-6 4 3 7-9"/></svg>
+        </span>
+        <span>PharmaPredict <b>AI</b></span>
+      </a>
+      <div class="topbar__actions">
+        <label class="select">
+          <span class="sr-only">Dataset</span>
+          <select id="datasetSelect" aria-label="Choose a dataset"><option value="">No datasets yet</option></select>
+        </label>
+        <button class="btn btn--ghost" id="demoBtn" type="button">Try synthetic demo</button>
+        <button class="btn btn--primary" id="uploadBtn" type="button">Upload sales data</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap" id="main">
+    <div id="synthBanner" class="banner banner--synth" hidden>
+      <strong>Synthetic demo data.</strong> These sales were generated to show how the system works. They are not from a real
+      pharmacy, and accuracy on them says nothing about accuracy on real data.
+    </div>
+
+    <!-- Empty state -->
+    <section id="emptyState" class="empty">
+      <div class="empty__art" aria-hidden="true">
+        <svg viewBox="0 0 220 120"><path d="M10 100 C50 90 60 40 100 55 S160 20 210 15" /><circle cx="210" cy="15" r="6"/></svg>
+      </div>
+      <h1>Forecast what each medicine will sell</h1>
+      <p>Upload your sales history as CSV or Excel. PharmaPredict cleans it, tests several forecasting models on your own
+        past data, picks the one that predicts best, and forecasts the next 7, 14 and 30 days for every medicine.</p>
+      <div class="empty__actions">
+        <button class="btn btn--primary btn--lg" type="button" data-open-upload>Upload sales data</button>
+        <button class="btn btn--ghost btn--lg" type="button" data-demo>See it with synthetic data</button>
+      </div>
+      <ul class="steps">
+        <li><b>1</b> Upload and check your data</li>
+        <li><b>2</b> Compare 7 models on past weeks</li>
+        <li><b>3</b> Get forecasts and export them</li>
+      </ul>
+    </section>
+
+    <!-- Dataset view -->
+    <section id="datasetView" hidden>
+      <div class="pagehead">
+        <div>
+          <p class="eyebrow" id="dsMeta"></p>
+          <h1 id="dsTitle">Dataset</h1>
+        </div>
+        <div class="pagehead__actions" id="runActions">
+          <button class="btn btn--primary" id="runBtn" type="button">Train and forecast</button>
+        </div>
+      </div>
+
+      <div class="progress" id="progress" hidden>
+        <div class="progress__row"><span id="progressMsg">Starting</span><span id="progressPct">0%</span></div>
+        <div class="progress__bar"><i id="progressBar"></i></div>
+      </div>
+      <div class="alert alert--error" id="runError" role="alert" hidden></div>
+
+      <!-- KPIs -->
+      <div class="kpis" id="kpis">
+        <article class="kpi"><span>Medicines analysed</span><b id="kpiProducts">–</b><small id="kpiProductsSub"></small></article>
+        <article class="kpi"><span>Units sold in history</span><b id="kpiUnits">–</b><small id="kpiUnitsSub"></small></article>
+        <article class="kpi kpi--accent">
+          <span>Forecast demand
+            <span class="seg" role="tablist" aria-label="Forecast horizon">
+              <button type="button" role="tab" data-h="7">7d</button><button type="button" role="tab" data-h="14">14d</button><button type="button" role="tab" data-h="30" class="is-on">30d</button>
+            </span>
+          </span>
+          <b id="kpiForecast">–</b><small id="kpiForecastSub">Train a model to see forecasts</small>
+        </article>
+        <article class="kpi"><span>Best model</span><b id="kpiModel" class="kpi__model">–</b><small id="kpiModelSub"></small></article>
+      </div>
+
+      <div class="grid">
+        <!-- Medicines -->
+        <section class="card card--wide" aria-labelledby="medTitle">
+          <div class="card__head">
+            <div>
+              <h2 id="medTitle">Medicines</h2>
+              <p class="muted">Click a medicine to see its history and forecast.</p>
+            </div>
+            <div class="card__tools">
+              <input type="search" id="medSearch" placeholder="Search medicines" aria-label="Search medicines">
+              <select id="medFilter" aria-label="Filter by status">
+                <option value="">All statuses</option><option value="forecast">Forecast</option>
+                <option value="insufficient_history">Insufficient data</option><option value="no_recent_sales">No recent sales</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="table" id="medTable">
+              <thead><tr><th>Medicine</th><th class="num">Next 7d</th><th class="num">Next 14d</th><th class="num">Next 30d</th><th class="num">Revenue 30d</th><th class="num" title="Error on the total over the test window">Test error</th><th>Status</th></tr></thead>
+              <tbody><tr><td colspan="7" class="muted pad">Train a model to see forecasts per medicine.</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Detail -->
+        <section class="card card--wide" id="detail" aria-live="polite" hidden>
+          <div class="card__head">
+            <div><p class="eyebrow" id="detailStatus"></p><h2 id="detailName"></h2></div>
+            <div class="legend" aria-hidden="true">
+              <span><i class="sw sw--hist"></i>Actual</span><span><i class="sw sw--back"></i>Test forecast</span><span><i class="sw sw--fc"></i>Forecast</span>
+            </div>
+          </div>
+          <div class="chart" id="detailChart"></div>
+          <div class="facts" id="detailFacts"></div>
+          <p class="note" id="detailNote" hidden></p>
+        </section>
+
+        <!-- Models -->
+        <section class="card" aria-labelledby="modelTitle">
+          <div class="card__head">
+            <div><h2 id="modelTitle">Model comparison</h2><p class="muted" id="modelSub">Lower is better on every column.</p></div>
+            <span class="seg" role="tablist" aria-label="Evaluation window">
+              <button type="button" data-stage="validation">Validation</button><button type="button" data-stage="test" class="is-on">Test</button>
+            </span>
+          </div>
+          <div class="table-wrap">
+            <table class="table table--models" id="modelTable">
+              <thead><tr><th>Model</th><th class="num">MAE</th><th class="num">RMSE</th><th class="num">WAPE</th><th class="num" title="WAPE on each medicine's 7, 14 and 30 day totals, averaged">Totals WAPE</th><th class="num">Bias</th></tr></thead>
+              <tbody><tr><td colspan="6" class="muted pad">No results yet.</td></tr></tbody>
+            </table>
+          </div>
+          <p class="muted small" id="selectionReason"></p>
+          <details class="explain"><summary>What do these numbers mean?</summary>
+            <ul>
+              <li><b>MAE</b>: average daily error, in units.</li>
+              <li><b>RMSE</b>: like MAE, but big misses count more.</li>
+              <li><b>WAPE</b>: total daily error as a share of units sold. 30% means off by 30% of volume.</li>
+              <li><b>Totals WAPE</b>: error on each medicine's 7, 14 and 30 day totals. This is what you order against, and it is how the model is chosen.</li>
+              <li><b>Bias</b>: above zero means over-forecasting (overstock risk); below zero means under-forecasting (stock-out risk).</li>
+            </ul>
+          </details>
+        </section>
+
+        <!-- Data quality -->
+        <section class="card" aria-labelledby="dqTitle">
+          <div class="card__head"><div><h2 id="dqTitle">Data quality</h2><p class="muted" id="dqSub"></p></div></div>
+          <ul class="issues" id="issues"></ul>
+          <details class="explain" id="mergesBox" hidden><summary id="mergesSummary">Name variants grouped</summary><div id="merges"></div></details>
+          <details class="explain" id="dupesBox" hidden><summary>Medicines that look alike (kept apart)</summary><div id="dupes"></div></details>
+        </section>
+
+        <!-- Exports and notes -->
+        <section class="card" aria-labelledby="expTitle">
+          <div class="card__head"><div><h2 id="expTitle">Export</h2><p class="muted">Forecasts and the full report.</p></div></div>
+          <div class="exports" id="exports">
+            <a class="btn btn--ghost is-disabled" data-export="forecasts.csv" aria-disabled="true">Daily forecasts (CSV)</a>
+            <a class="btn btn--ghost is-disabled" data-export="summary.csv" aria-disabled="true">Summary by medicine (CSV)</a>
+            <a class="btn btn--ghost is-disabled" data-export="report.html" aria-disabled="true">Full report (HTML)</a>
+          </div>
+          <ul class="warnings" id="warnings"></ul>
+          <p class="muted small" id="splitInfo"></p>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <!-- Upload dialog -->
+  <dialog id="uploadDialog" aria-labelledby="uploadTitle">
+    <form id="uploadForm" method="dialog">
+      <div class="dlg__head">
+        <h2 id="uploadTitle">Upload sales history</h2>
+        <button class="icon-btn" type="button" data-close aria-label="Close">×</button>
+      </div>
+      <label class="drop" id="drop">
+        <input type="file" id="fileInput" name="file" accept=".csv,.txt,.tsv,.xlsx,.xls,.xlsm" required>
+        <span class="drop__icon" aria-hidden="true">⬆</span>
+        <span id="dropText"><b>Choose a CSV or Excel file</b> or drag it here</span>
+        <small>Needs a date, a medicine name or ID, and quantity sold. Price is optional.</small>
+      </label>
+      <label class="check">
+        <input type="checkbox" name="absent_days_are_zero">
+        <span><b>My file lists every sale</b><small>Tick this for till or POS exports. Days with no record for a medicine then count as zero sales. Leave it off if some sales may be missing; those days are then treated as unknown.</small></span>
+      </label>
+      <label class="check">
+        <input type="checkbox" name="drop_exact_duplicates">
+        <span><b>Remove exact duplicate rows</b><small>Only if your system sometimes exports the same line twice. Not needed when the file has invoice numbers.</small></span>
+      </label>
+      <label class="field">Date format
+        <select name="date_format"><option value="auto">Detect automatically (day-first if unclear)</option><option value="dayfirst">Day first (31/12/2025)</option><option value="monthfirst">Month first (12/31/2025)</option></select>
+      </label>
+      <details class="explain"><summary>Advanced: column names and aliases</summary>
+        <label class="field">Column mapping (JSON)
+          <textarea name="column_mapping" rows="2" placeholder='{"quantity": "Qty Sold", "date": "Txn Date"}'></textarea>
+        </label>
+        <label class="field">Name aliases (JSON)
+          <textarea name="name_aliases" rows="2" placeholder='{"Panadol 500mg": "Paracetamol 500mg Tablets"}'></textarea>
+        </label>
+      </details>
+      <div class="alert alert--error" id="uploadError" role="alert" hidden></div>
+      <div class="dlg__foot">
+        <button class="btn btn--ghost" type="button" data-close>Cancel</button>
+        <button class="btn btn--primary" type="submit" id="uploadSubmit">Upload and check</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
